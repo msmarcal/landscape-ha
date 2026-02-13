@@ -275,7 +275,7 @@ only the password (no newlines or extra whitespace).
 Create the password file:
 
 ```bash
-mkdir -p ../../pcb-plus/secrets (if it doesn't exist)
+mkdir -p ../../pcb-plus/secrets # (if it doesn't exist)
 pwgen 16 1 > ../../pcb-plus/secrets/landscape-password.txt
 chmod 600 ../../pcb-plus/secrets/landscape-password.txt
 ```
