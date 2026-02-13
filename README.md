@@ -296,7 +296,6 @@ juju status -m landscape --relations
 juju ssh -m landscape postgresql/leader 'patronictl list'
 
 # RabbitMQ cluster
-```bash
 juju ssh -m landscape rabbitmq-server/0 'rabbitmqctl cluster_status'
 ```
 
