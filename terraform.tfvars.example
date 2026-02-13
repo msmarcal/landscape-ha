@@ -1,0 +1,187 @@
+# ============================================================================
+# Landscape HA Deployment - Example Configuration
+# ============================================================================
+#
+# Description: Example terraform.tfvars for Landscape HA deployment.
+#              Copy this file to terraform.tfvars and customize for your env.
+#
+# Author:      Marcelo Marcal <marcelo.marcal@canonical.com>
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars with your values
+#   tofu init
+#   tofu plan
+#   tofu apply
+#
+# Prerequisites:
+#   - MAAS machines tagged: landscape, landscapesql, landscapeamqp, landscapeha
+#   - Juju controller bootstrapped on your MAAS cloud
+#   - Run 'juju clouds' to find your cloud_name
+#
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# MAAS Cloud Configuration
+# ----------------------------------------------------------------------------
+# cloud_name: Must match the MAAS cloud name in Juju (run 'juju clouds')
+# cloud_region: Usually "default" unless you have multiple MAAS regions
+
+cloud_name   = "maas_cloud"
+cloud_region = "default"
+
+# Path to export HAProxy SSL certificate for Landscape clients
+ssl_cert_export_path = "../../pcb-plus/secrets"
+
+# SSL Certificate Configuration
+# The self-signed certificate will include these names as Subject Alternative Names
+# Note: MAAS DNS uses .maas suffix for all hostnames
+ssl_cert_cn = "landscape.maas"
+ssl_cert_sans = [
+  "landscape.maas",
+  "landscapeha-1.maas",
+  "landscapeha-2.maas",
+  "landscapeha-3.maas"
+]
+
+# ----------------------------------------------------------------------------
+# Landscape Admin Configuration
+# ----------------------------------------------------------------------------
+# Initial administrator account created during first deployment.
+#
+# Password priority:
+#   1. Password file (landscape_admin_password_file) if it exists
+#   2. Variable (landscape_admin_password) if set
+#   3. Empty = set via web UI during first login
+
+landscape_admin_email         = "admin@example.com"
+landscape_admin_name          = "Administrator"
+landscape_admin_password_file = "../../pcb-plus/secrets/landscape-password.txt"
+# landscape_admin_password    = ""  # Fallback if file doesn't exist
+
+# ----------------------------------------------------------------------------
+# Juju Model Configuration
+# ----------------------------------------------------------------------------
+# model_name: Name for the Juju model (visible in 'juju models')
+# model_config: Key-value pairs for model settings
+
+model_name = "landscape"
+model_config = {
+  "logging-config" = "<root>=WARNING"
+}
+
+# ============================================================================
+# APPLICATION CONFIGURATIONS
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Landscape Server - HA with 3 units across availability zones
+# ----------------------------------------------------------------------------
+# The main Landscape application. Requires machines tagged 'landscape' in MAAS.
+#
+# Common config options:
+#   admin_email  - Email for the admin account
+#   admin_name   - Display name for the admin
+#   root_url     - Public URL (e.g., "https://landscape.example.com")
+#   license_file - Landscape license (base64 encoded)
+
+landscape_server = {
+  app_name    = "landscape-server"
+  channel     = "latest/stable"
+  base        = "ubuntu@24.04"
+  units       = 3
+  constraints = "tags=landscape zones=AZ1,AZ2,AZ3"
+  config      = {}
+}
+
+# ----------------------------------------------------------------------------
+# PostgreSQL - HA with 3 units (Patroni cluster)
+# ----------------------------------------------------------------------------
+# Database backend with automatic failover. Requires machines tagged
+# 'landscapesql' in MAAS. Uses Patroni for leader election and streaming
+# replication.
+#
+# IMPORTANT: Use channel 14/stable with ubuntu@22.04. This version provides
+#            the legacy 'pgsql' interface required by landscape-server.
+#            Channel 16/stable uses the new 'postgresql_client' interface
+#            which is NOT compatible with landscape-server.
+#
+# Required plugins are enabled below for Landscape compatibility.
+
+postgresql = {
+  app_name    = "postgresql"
+  channel     = "14/stable"
+  base        = "ubuntu@22.04"
+  units       = 3
+  constraints = "tags=landscapesql zones=AZ1,AZ2,AZ3"
+  config = {
+    # Required PostgreSQL extensions for Landscape
+    "plugin_plpython3u_enable" = "true"   # Python stored procedures
+    "plugin_ltree_enable"      = "true"   # Hierarchical data structures
+    "plugin_intarray_enable"   = "true"   # Integer array operations
+    "plugin_debversion_enable" = "true"   # Debian version comparison
+    "plugin_pg_trgm_enable"    = "true"   # Trigram text search
+
+    # Performance tuning
+    "experimental_max_connections" = "500"
+  }
+}
+
+# ----------------------------------------------------------------------------
+# HAProxy - Load balancer and TLS termination
+# ----------------------------------------------------------------------------
+# Single entry point for all Landscape traffic. Requires a machine tagged
+# 'landscapeha' in MAAS. Handles SSL/TLS and distributes requests across
+# Landscape Server units.
+#
+# IMPORTANT: Use ubuntu@22.04. The HAProxy charm has bugs on Ubuntu 24.04
+#            that require workarounds (included in main.tf).
+#
+# NOTE: Do NOT set ssl_cert=SELFSIGNED - the charm's certificate generation
+#       is broken. The Terraform config generates the cert via workaround.
+#
+# For production, replace with your actual certificate:
+#   ssl_cert = "<base64-encoded-fullchain.pem>"
+#   ssl_key  = "<base64-encoded-privkey.pem>"
+
+haproxy = {
+  app_name    = "haproxy"
+  channel     = "latest/stable"
+  base        = "ubuntu@22.04"
+  units       = 1
+  constraints = "tags=landscapeha zones=AZ1"
+  config = {
+    # IMPORTANT: Must be empty to prevent duplicate frontend blocks
+    # when using the website relation with landscape-server
+    "services" = ""
+
+    # Timeout settings (milliseconds)
+    # queue=60s, connect=5s, client=120s, server=120s
+    "default_timeouts" = "queue 60000, connect 5000, client 120000, server 120000"
+
+    # TLS settings
+    "global_default_bind_options" = "no-tlsv10"
+  }
+}
+
+# ----------------------------------------------------------------------------
+# RabbitMQ - HA with 3 units (cluster with mirrored queues)
+# ----------------------------------------------------------------------------
+# Message broker for async job processing. Requires machines tagged
+# 'landscapeamqp' in MAAS. Forms a cluster with automatic queue mirroring.
+#
+# NOTE: Channel 3.12/stable is required for Ubuntu 24.04 support.
+#
+# consumer-timeout: Max time for message acknowledgment (3 days = 259200000ms)
+# Set high because some Landscape jobs (e.g., package updates) can take hours.
+
+rabbitmq_server = {
+  app_name    = "rabbitmq-server"
+  channel     = "3.12/stable"
+  base        = "ubuntu@24.04"
+  units       = 3
+  constraints = "tags=landscapeamqp zones=AZ1,AZ2,AZ3"
+  config = {
+    "consumer-timeout" = "259200000"
+  }
+}
