@@ -296,10 +296,10 @@ juju status -m landscape --relations
 juju ssh -m landscape postgresql/leader 'patronictl list'
 
 # RabbitMQ cluster
+```bash
 juju ssh -m landscape rabbitmq-server/0 'rabbitmqctl cluster_status'
 ```
 
-```
 
 ### Backup PostgreSQL
 
@@ -311,9 +311,11 @@ juju run -m landscape postgresql/leader list-backups
 ### Destroy
 
 ```bash
-terraform destroy
+tofu destroy
+```
 
 # Or via Juju
+```bash
 juju destroy-model landscape --destroy-storage -y
 ```
 
