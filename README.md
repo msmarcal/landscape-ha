@@ -313,7 +313,7 @@ juju run -m landscape postgresql/leader list-backups
 tofu destroy
 ```
 
-# Or via Juju
+#### Or via Juju
 ```bash
 juju destroy-model landscape --destroy-storage -y
 ```
