@@ -211,6 +211,7 @@ haproxy = {
   constraints = "tags=landscapeha zones=AZ1"
   config = {
     "services"                    = ""  # CRITICAL: Prevents duplicate frontends
+    "ssl_cert"                    = "SELFSIGNED"
     "default_timeouts"            = "queue 60000, connect 5000, client 120000, server 120000"
     "global_default_bind_options" = "no-tlsv10"
   }
@@ -256,9 +257,10 @@ landscape_server = {
 
 ```hcl
 # Admin credentials
-landscape_admin_email         = "admin@example.com"
-landscape_admin_name          = "Administrator"
-landscape_admin_password_file = "../../pcb-plus/secrets/landscape-password.txt"
+landscape_admin_email              = "admin@example.com"
+landscape_admin_name               = "Administrator"
+landscape_admin_password_file      = "../../pcb-plus/secrets/landscape-password.txt"
+landscape_registration_key_file    = "../../pcb-plus/secrets/landscape_registration_key.txt"
 
 # Additional config via landscape_server
 landscape_server = {
@@ -269,15 +271,38 @@ landscape_server = {
 }
 ```
 
-Password is read from the file automatically if it exists. The file should contain
-only the password (no newlines or extra whitespace).
+Password and registration key are read from their respective files automatically if
+they exist. Each file should contain only the value (no newlines or extra whitespace).
 
-Create the password file:
+Create the secret files:
 
 ```bash
 mkdir -p ../../pcb-plus/secrets # (if it doesn't exist)
 pwgen 16 1 > ../../pcb-plus/secrets/landscape-password.txt
-chmod 600 ../../pcb-plus/secrets/landscape-password.txt
+pwgen 32 1 > ../../pcb-plus/secrets/landscape_registration_key.txt
+chmod 600 ../../pcb-plus/secrets/landscape-password.txt ../../pcb-plus/secrets/landscape_registration_key.txt
+```
+
+### Landscape Client Configuration
+
+After deployment, get the values needed to configure `landscape-client`:
+
+```bash
+tofu output
+```
+
+| Output | landscape-client config | Description |
+|--------|------------------------|-------------|
+| `landscape_url` | `url` | Message server URL (`https://<hostname>/message-system`) |
+| `landscape_ping_url` | `ping-url` | Ping server URL (`http://<hostname>/ping`) |
+| `ssl_cert_path` | `ssl-public-key` | Path to the exported SSL certificate |
+| `registration_key` | `registration-key` | Client enrollment key (sensitive) |
+| `account_name` | `account-name` | Landscape account name (`standalone`) |
+
+To view the registration key:
+
+```bash
+tofu output -raw registration_key
 ```
 
 ## Operations

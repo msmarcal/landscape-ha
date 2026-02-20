@@ -33,6 +33,10 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.0"
     }
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -102,7 +106,7 @@ locals {
       "admin_email"      = var.landscape_admin_email
       "admin_name"       = var.landscape_admin_name
       "admin_password"   = local.landscape_admin_password
-      "registration-key" = local.landscape_registration_key
+      "registration_key" = local.landscape_registration_key
     } : k => v if v != ""
   }
 
@@ -327,4 +331,18 @@ resource "null_resource" "export_haproxy_cert" {
       echo "Certificate exported to ${var.ssl_cert_export_path}/landscape.crt"
     EOT
   }
+}
+
+# ----------------------------------------------------------------------------
+# HAProxy Hostname
+# ----------------------------------------------------------------------------
+# Queries the HAProxy unit's hostname after deployment for use in outputs.
+# This is the machine's instance ID in MAAS (e.g., "landscapeha-1").
+data "external" "haproxy_hostname" {
+  depends_on = [null_resource.export_haproxy_cert]
+
+  program = [
+    "bash", "-c",
+    "printf '{\"hostname\":\"%s\"}' \"$(juju exec --unit ${var.haproxy.app_name}/0 -- hostname | tr -d '\\n\\r')\""
+  ]
 }
