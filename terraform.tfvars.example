@@ -149,7 +149,8 @@ haproxy = {
     "services" = ""
 
     # Self-signed certificate for TLS termination
-    # The charm generates /var/lib/haproxy/default.pem automatically
+    # The charm configures HAProxy to use /var/lib/haproxy/default.pem but may
+    # not generate the cert itself; the export_haproxy_cert resource handles this
     "ssl_cert" = "SELFSIGNED"
 
     # Timeout settings (milliseconds)
