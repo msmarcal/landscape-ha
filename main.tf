@@ -6,7 +6,7 @@
 #              on bare metal machines managed by MAAS using Juju.
 #
 # Author:      Marcelo Marcal <marcelo.marcal@canonical.com>
-# Repository:  https://github.com/canonical/landscape-deploy
+# Repository:  https://github.com/msmarcal/landscape-ha
 #
 # Architecture:
 #   - Landscape Server (3 units) - Stateless application servers
@@ -49,6 +49,16 @@ provider "juju" {}
 # ----------------------------------------------------------------------------
 # Creates a dedicated model for Landscape deployment on the MAAS cloud.
 # All applications and integrations are deployed within this model.
+
+locals {
+  # Inject SSH public key into all machines via Juju authorized-keys
+  ssh_authorized_keys = (
+    fileexists(pathexpand(var.ssh_public_key_file))
+    ? { "authorized-keys" = trimspace(file(pathexpand(var.ssh_public_key_file))) }
+    : {}
+  )
+}
+
 resource "juju_model" "landscape" {
   name = var.model_name
 
@@ -57,7 +67,7 @@ resource "juju_model" "landscape" {
     region = var.cloud_region
   }
 
-  config = var.model_config
+  config = merge(var.model_config, local.ssh_authorized_keys)
 }
 
 # ============================================================================
@@ -232,21 +242,16 @@ resource "juju_integration" "landscape_postgresql" {
 }
 
 # ============================================================================
-# POST-DEPLOYMENT WORKAROUNDS
+# POST-DEPLOYMENT
 # ============================================================================
-# The HAProxy charm (latest/stable) has a bug on Ubuntu 22.04/24.04 where
-# self-signed certificate generation fails silently.
-#
-# NOTE: Duplicate frontend blocks are prevented by setting services="" in
-#       the HAProxy charm config.
 
 # ----------------------------------------------------------------------------
-# HAProxy SSL Certificate Generation
+# Export HAProxy SSL Certificate
 # ----------------------------------------------------------------------------
-# Workaround for HAProxy charm SSL bug:
-#   - Generates self-signed SSL certificate manually with SANs
-#   - Restarts HAProxy service to load the certificate
-resource "null_resource" "haproxy_ssl_cert" {
+# Extracts the self-signed certificate from HAProxy for use by Landscape
+# clients. The certificate is saved to the specified path for distribution.
+# Requires ssl_cert = "SELFSIGNED" in the HAProxy charm config.
+resource "null_resource" "export_haproxy_cert" {
   depends_on = [
     juju_integration.landscape_haproxy
   ]
@@ -258,58 +263,29 @@ resource "null_resource" "haproxy_ssl_cert" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "Waiting for HAProxy deployment to stabilize..."
-      sleep 60
+      echo "Waiting for HAProxy to generate self-signed certificate..."
+      MAX_ATTEMPTS=30
+      ATTEMPT=0
+      while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+        ATTEMPT=$((ATTEMPT + 1))
+        if juju exec --unit ${var.haproxy.app_name}/0 -- \
+          'test -s /var/lib/haproxy/default.pem' 2>/dev/null; then
+          echo "Certificate found after $ATTEMPT attempt(s)."
+          break
+        fi
+        echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: certificate not ready, retrying in 10s..."
+        sleep 10
+      done
 
-      echo "Generating self-signed SSL certificate with SANs..."
-      HAPROXY_IP=$(juju status ${var.haproxy.app_name}/0 --format json | jq -r '.applications["${var.haproxy.app_name}"].units["${var.haproxy.app_name}/0"]["public-address"]')
+      if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+        echo "ERROR: Certificate was not generated after $MAX_ATTEMPTS attempts." >&2
+        exit 1
+      fi
 
-      # Build SAN list from variable + discovered IP
-      SAN_LIST="IP:$HAPROXY_IP"
-      %{ for san in var.ssl_cert_sans ~}
-      SAN_LIST="$SAN_LIST,DNS:${san}"
-      %{ endfor ~}
-
-      juju exec --unit ${var.haproxy.app_name}/0 -- "openssl req -x509 -nodes \
-        -newkey rsa:2048 \
-        -keyout /var/lib/haproxy/default.pem \
-        -out /tmp/cert.pem \
-        -days 365 \
-        -subj '/CN=${var.ssl_cert_cn}' \
-        -addext 'subjectAltName=$SAN_LIST' 2>&1 && \
-        cat /tmp/cert.pem >> /var/lib/haproxy/default.pem && \
-        chown haproxy:haproxy /var/lib/haproxy/default.pem && \
-        chmod 600 /var/lib/haproxy/default.pem"
-
-      echo "Restarting HAProxy to load certificate..."
-      juju exec --unit ${var.haproxy.app_name}/0 -- 'systemctl restart haproxy'
-
-      echo "HAProxy SSL certificate generated successfully."
-    EOT
-  }
-}
-
-# ----------------------------------------------------------------------------
-# Export HAProxy SSL Certificate
-# ----------------------------------------------------------------------------
-# Extracts the self-signed certificate from HAProxy for use by Landscape
-# clients. The certificate is saved to the specified path for distribution.
-resource "null_resource" "export_haproxy_cert" {
-  depends_on = [
-    null_resource.haproxy_ssl_cert
-  ]
-
-  triggers = {
-    # Re-run if haproxy application changes
-    haproxy_app = juju_application.haproxy.name
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
       echo "Exporting HAProxy SSL certificate..."
       mkdir -p "${var.ssl_cert_export_path}"
       juju exec --unit ${var.haproxy.app_name}/0 -- \
-        'openssl x509 -in /var/lib/haproxy/default.pem 2>/dev/null' \
+        'openssl x509 -in /var/lib/haproxy/default.pem' \
         > "${var.ssl_cert_export_path}/landscape.crt"
       echo "Certificate exported to ${var.ssl_cert_export_path}/landscape.crt"
     EOT

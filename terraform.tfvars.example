@@ -33,16 +33,12 @@ cloud_region = "default"
 # Path to export HAProxy SSL certificate for Landscape clients
 ssl_cert_export_path = "../../pcb-plus/secrets"
 
-# SSL Certificate Configuration
-# The self-signed certificate will include these names as Subject Alternative Names
-# Note: MAAS DNS uses .maas suffix for all hostnames
+# SSL Certificate Common Name (used in outputs for the Landscape URL)
 ssl_cert_cn = "landscape.maas"
-ssl_cert_sans = [
-  "landscape.maas",
-  "landscapeha-1.maas",
-  "landscapeha-2.maas",
-  "landscapeha-3.maas"
-]
+
+# SSH Public Key - Injected into all machines via Juju authorized-keys
+# Default: ~/.ssh/id_rsa.pub (automatically detected)
+# ssh_public_key_file = "~/.ssh/id_rsa.pub"
 
 # ----------------------------------------------------------------------------
 # Landscape Admin Configuration
@@ -135,12 +131,9 @@ postgresql = {
 # Landscape Server units.
 #
 # IMPORTANT: Use ubuntu@22.04. The HAProxy charm has bugs on Ubuntu 24.04
-#            that require workarounds (included in main.tf).
+#            that prevent proper operation.
 #
-# NOTE: Do NOT set ssl_cert=SELFSIGNED - the charm's certificate generation
-#       is broken. The Terraform config generates the cert via workaround.
-#
-# For production, replace with your actual certificate:
+# For production, replace ssl_cert with your actual certificate:
 #   ssl_cert = "<base64-encoded-fullchain.pem>"
 #   ssl_key  = "<base64-encoded-privkey.pem>"
 
@@ -154,6 +147,10 @@ haproxy = {
     # IMPORTANT: Must be empty to prevent duplicate frontend blocks
     # when using the website relation with landscape-server
     "services" = ""
+
+    # Self-signed certificate for TLS termination
+    # The charm generates /var/lib/haproxy/default.pem automatically
+    "ssl_cert" = "SELFSIGNED"
 
     # Timeout settings (milliseconds)
     # queue=60s, connect=5s, client=120s, server=120s

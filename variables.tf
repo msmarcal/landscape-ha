@@ -38,16 +38,6 @@ variable "ssl_cert_cn" {
   default     = "landscape.maas"
 }
 
-variable "ssl_cert_sans" {
-  description = "Subject Alternative Names (SANs) for the SSL certificate. Include hostnames, IPs, and DNS names."
-  type        = list(string)
-  default     = [
-    "landscape.maas",
-    "landscapeha-1.maas",
-    "landscapeha-2.maas",
-    "landscapeha-3.maas"
-  ]
-}
 
 # ----------------------------------------------------------------------------
 # Landscape Admin Configuration
@@ -87,6 +77,12 @@ variable "cloud_region" {
   description = "MAAS region to deploy to (usually 'default')"
   type        = string
   default     = "default"
+}
+
+variable "ssh_public_key_file" {
+  description = "Path to SSH public key file to inject into all deployed machines via Juju authorized-keys"
+  type        = string
+  default     = "~/.ssh/id_rsa.pub"
 }
 
 # ----------------------------------------------------------------------------
@@ -187,10 +183,7 @@ variable "postgresql" {
 # Load balancer providing TLS termination and traffic distribution.
 # Single unit is typical; add more for load balancer redundancy.
 #
-# IMPORTANT: Use ubuntu@22.04 with latest/stable channel. The charm has
-#            several bugs on Ubuntu 24.04:
-#            - Self-signed certificate generation fails
-#            The Terraform config includes workarounds for SSL generation.
+# IMPORTANT: Use ubuntu@22.04 with latest/stable channel.
 #
 # NOTE: Avoid 2.8/stable channel - it has a bug with missing DH parameters.
 #
