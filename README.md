@@ -53,23 +53,23 @@ This project provides Infrastructure as Code (IaC) for deploying Landscape Serve
 
 ## HA Components
 
-| Component | Units | HA Mechanism | Failover |
-|-----------|-------|--------------|----------|
-| **PostgreSQL** | 3 | Patroni + Streaming Replication | Automatic |
-| **RabbitMQ** | 3 | Clustered + Mirrored Queues | Automatic |
-| **Landscape Server** | 3 | Stateless + Load Balanced | Automatic |
-| **HAProxy** | 1 | Load Balancer | Single entry point |
+| Component            | Units | HA Mechanism                    | Failover           |
+|----------------------|-------|---------------------------------|--------------------|
+| **PostgreSQL**       | 3     | Patroni + Streaming Replication | Automatic          |
+| **RabbitMQ**         | 3     | Clustered + Mirrored Queues     | Automatic          |
+| **Landscape Server** | 3     | Stateless + Load Balanced       | Automatic          |
+| **HAProxy**          | 1     | Load Balancer                   | Single entry point |
 
 ## Prerequisites
 
 ### Required Infrastructure
 
-| Component | Requirement |
-|-----------|-------------|
-| MAAS | Configured with available machines |
-| Juju Controller | Bootstrapped on MAAS (`maas_cloud`) |
-| Machines | **10 machines** available in MAAS pool |
-| Availability Zones | 3 zones recommended (AZ1, AZ2, AZ3) |
+| Component          | Requirement                            |
+|--------------------|----------------------------------------|
+| MAAS               | Configured with available machines     |
+| Juju Controller    | Bootstrapped on MAAS (`maas_cloud`)    |
+| Machines           | **10 machines** available in MAAS pool |
+| Availability Zones | 3 zones recommended (AZ1, AZ2, AZ3)    |
 
 ### MAAS Configuration
 
@@ -77,21 +77,21 @@ It is needed pre-created VMs with the proper tags.
 
 ### Machine Requirements
 
-| Role | Tag | Count | Minimum Specs |
-|------|-----|-------|---------------|
-| Landscape Server | `landscape` | 3 | 4 vCPU, 4GB RAM, 50GB disk |
-| PostgreSQL | `landscapesql` | 3 | 4 vCPU, 4GB RAM, 100GB disk |
-| RabbitMQ | `landscapeamqp` | 3 | 2 vCPU, 2GB RAM, 20GB disk |
-| HAProxy | `landscapeha` | 1 | 2 vCPU, 2GB RAM, 20GB disk |
-| **Total** | | **10** | |
+| Role             | Tag             | Count  | Minimum Specs               |
+|------------------|-----------------|--------|-----------------------------|
+| Landscape Server | `landscape`     | 3      | 4 vCPU, 4GB RAM, 50GB disk  |
+| PostgreSQL       | `landscapesql`  | 3      | 4 vCPU, 4GB RAM, 100GB disk |
+| RabbitMQ         | `landscapeamqp` | 3      | 2 vCPU, 2GB RAM, 20GB disk  |
+| HAProxy          | `landscapeha`   | 1      | 2 vCPU, 2GB RAM, 20GB disk  |
+| **Total**        |                 | **10** |                             |
 
 ### Zone Distribution
 
-| Zone | Machines |
-|------|----------|
-| AZ1 | 1x landscape, 1x landscapesql, 1x landscapeamqp, 1x landscapeha |
-| AZ2 | 1x landscape, 1x landscapesql, 1x landscapeamqp |
-| AZ3 | 1x landscape, 1x landscapesql, 1x landscapeamqp |
+| Zone | Machines                                                        |
+|------|-----------------------------------------------------------------|
+| AZ1  | 1x landscape, 1x landscapesql, 1x landscapeamqp, 1x landscapeha |
+| AZ2  | 1x landscape, 1x landscapesql, 1x landscapeamqp                 |
+| AZ3  | 1x landscape, 1x landscapesql, 1x landscapeamqp                 |
 
 ### Required Software
 
@@ -291,13 +291,13 @@ After deployment, get the values needed to configure `landscape-client`:
 tofu output
 ```
 
-| Output | landscape-client config | Description |
-|--------|------------------------|-------------|
-| `landscape_url` | `url` | Message server URL (`https://<hostname>/message-system`) |
-| `landscape_ping_url` | `ping-url` | Ping server URL (`http://<hostname>/ping`) |
-| `ssl_cert_path` | `ssl-public-key` | Path to the exported SSL certificate |
-| `registration_key` | `registration-key` | Client enrollment key (sensitive) |
-| `account_name` | `account-name` | Landscape account name (`standalone`) |
+| Output               | landscape-client config | Description                                              |
+|----------------------|-------------------------|----------------------------------------------------------|
+| `landscape_url`      | `url`                   | Message server URL (`https://<hostname>/message-system`) |
+| `landscape_ping_url` | `ping-url`              | Ping server URL (`http://<hostname>/ping`)               |
+| `ssl_cert_path`      | `ssl-public-key`        | Path to the exported SSL certificate                     |
+| `registration_key`   | `registration-key`      | Client enrollment key (sensitive)                        |
+| `account_name`       | `account-name`          | Landscape account name (`standalone`)                    |
 
 To view the registration key:
 
