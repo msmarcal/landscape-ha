@@ -73,6 +73,19 @@ variable "landscape_admin_password_file" {
   default     = "../../pcb-plus/secrets/landscape-password.txt"
 }
 
+variable "landscape_registration_key" {
+  description = "Registration key for Landscape client enrollment (sensitive). Ignored if key file exists."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "landscape_registration_key_file" {
+  description = "Path to file containing registration key. Takes precedence over landscape_registration_key."
+  type        = string
+  default     = "../../pcb-plus/secrets/landscape_registration_key.txt"
+}
+
 variable "cloud_region" {
   description = "MAAS region to deploy to (usually 'default')"
   type        = string

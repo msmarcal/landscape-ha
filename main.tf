@@ -89,12 +89,20 @@ locals {
     : var.landscape_admin_password
   )
 
+  # Read registration key from file if it exists, otherwise use variable
+  landscape_registration_key = (
+    fileexists(var.landscape_registration_key_file)
+    ? trimspace(file(var.landscape_registration_key_file))
+    : var.landscape_registration_key
+  )
+
   # Build admin config from variables, excluding empty values
   landscape_admin_config = {
     for k, v in {
-      "admin_email"    = var.landscape_admin_email
-      "admin_name"     = var.landscape_admin_name
-      "admin_password" = local.landscape_admin_password
+      "admin_email"      = var.landscape_admin_email
+      "admin_name"       = var.landscape_admin_name
+      "admin_password"   = local.landscape_admin_password
+      "registration-key" = local.landscape_registration_key
     } : k => v if v != ""
   }
 
