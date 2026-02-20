@@ -266,6 +266,12 @@ resource "null_resource" "export_haproxy_cert" {
 
   provisioner "local-exec" {
     command = <<-EOT
+      echo "Waiting for ${var.landscape_server.app_name} to be ready..."
+      juju wait-for application ${var.landscape_server.app_name} \
+        -m ${var.model_name} \
+        --query='status=="active"' \
+        --timeout 30m
+
       echo "Checking for HAProxy SSL certificate..."
       MAX_ATTEMPTS=30
       ATTEMPT=0
