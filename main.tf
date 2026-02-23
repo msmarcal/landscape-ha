@@ -37,6 +37,10 @@ terraform {
       source  = "hashicorp/local"
       version = "~> 2.0"
     }
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -172,7 +176,7 @@ resource "juju_application" "haproxy" {
   units       = var.haproxy.units
   constraints = var.haproxy.constraints
   config = merge(var.haproxy.config, {
-    "ssl_cert" = base64encode(tls_locally_signed_cert.haproxy.cert_pem)
+    "ssl_cert" = base64encode("${tls_locally_signed_cert.haproxy.cert_pem}${tls_self_signed_cert.ca.cert_pem}")
     "ssl_key"  = base64encode(tls_private_key.haproxy.private_key_pem)
   })
 }
@@ -327,4 +331,21 @@ resource "tls_locally_signed_cert" "haproxy" {
 resource "local_file" "landscape_cert" {
   content  = tls_self_signed_cert.ca.cert_pem
   filename = "${var.ssl_cert_export_path}/landscape.crt"
+}
+
+# ----------------------------------------------------------------------------
+# HAProxy Hostname
+# ----------------------------------------------------------------------------
+# Queries the first HAProxy unit's hostname for use in outputs.
+data "external" "haproxy_hostname" {
+  depends_on = [
+    juju_integration.landscape_haproxy,
+    juju_integration.landscape_rabbitmq,
+    juju_integration.landscape_postgresql,
+  ]
+
+  program = [
+    "bash", "-c",
+    "printf '{\"hostname\":\"%s.maas\"}' \"$(juju exec --unit ${var.haproxy.app_name}/0 -- hostname | tr -d '\\n\\r')\""
+  ]
 }

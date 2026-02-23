@@ -14,28 +14,13 @@
 # ----------------------------------------------------------------------------
 
 output "model_name" {
-  description = "Name of the Juju model"
+  description = "Juju model name (use with: juju status -m <model>)"
   value       = juju_model.landscape.name
 }
 
-output "landscape_server" {
-  description = "Landscape Server application name"
-  value       = juju_application.landscape_server.name
-}
-
-output "postgresql" {
-  description = "PostgreSQL application name"
-  value       = juju_application.postgresql.name
-}
-
-output "haproxy" {
-  description = "HAProxy application name"
-  value       = juju_application.haproxy.name
-}
-
-output "rabbitmq_server" {
-  description = "RabbitMQ Server application name"
-  value       = juju_application.rabbitmq_server.name
+output "haproxy_hostname" {
+  description = "HAProxy leader unit hostname"
+  value       = data.external.haproxy_hostname.result.hostname
 }
 
 # ----------------------------------------------------------------------------
@@ -48,28 +33,18 @@ output "rabbitmq_server" {
 #   tofu output                      # Show all outputs
 #   tofu output -raw registration_key # Show sensitive values
 
-output "landscape_url" {
-  description = "Message server URL (landscape-client: url)"
-  value       = "https://${var.ssl_cert_cn}/message-system"
-}
-
-output "landscape_ping_url" {
-  description = "Ping server URL (landscape-client: ping-url)"
-  value       = "http://${var.ssl_cert_cn}/ping"
-}
-
-output "ssl_cert_path" {
-  description = "Path to exported SSL certificate (landscape-client: ssl-public-key)"
-  value       = "${var.ssl_cert_export_path}/landscape.crt"
+output "landscape_client_config" {
+  description = "Configuration values for landscape-client charm"
+  value = {
+    url            = "https://${data.external.haproxy_hostname.result.hostname}/message-system"
+    ping_url       = "http://${data.external.haproxy_hostname.result.hostname}/ping"
+    ssl_public_key = abspath("${var.ssl_cert_export_path}/landscape.crt")
+    account_name   = "standalone"
+  }
 }
 
 output "registration_key" {
   description = "Client enrollment key (landscape-client: registration-key)"
   value       = local.landscape_registration_key
   sensitive   = true
-}
-
-output "account_name" {
-  description = "Landscape account name (landscape-client: account-name)"
-  value       = "standalone"
 }
