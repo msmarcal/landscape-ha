@@ -200,7 +200,7 @@ variable "postgresql" {
 # HAProxy
 # ----------------------------------------------------------------------------
 # Load balancer providing TLS termination and traffic distribution.
-# Single unit is typical; add more for load balancer redundancy.
+# 3 units recommended for full HA across availability zones.
 #
 # IMPORTANT: Use ubuntu@22.04 with latest/stable channel.
 #
@@ -222,7 +222,7 @@ variable "haproxy" {
     channel     = optional(string, "latest/stable")
     revision    = optional(number)
     base        = optional(string, "ubuntu@22.04")
-    units       = optional(number, 1)
+    units       = optional(number, 3)
     constraints = optional(string, "")
     config      = optional(map(string), {})
   })

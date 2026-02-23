@@ -18,14 +18,15 @@ This project provides Infrastructure as Code (IaC) for deploying Landscape Serve
 ```
                                     Clients
                                        │
-                                       ▼
-                               ┌─────────────┐
-                               │   HAProxy   │
-                               │    (AZ1)    │
-                               │ TLS + Load  │
-                               │  Balancing  │
-                               └──────┬──────┘
-                                      │
+        ┌──────────────────────────────┼──────────────────────────────┐
+        │                              │                              │
+  ┌─────▼─────┐                  ┌─────▼─────┐                 ┌─────▼─────┐
+  │  HAProxy  │                  │  HAProxy  │                 │  HAProxy  │
+  │   (AZ1)   │                  │   (AZ2)   │                 │   (AZ3)   │
+  │ TLS + LB  │                  │ TLS + LB  │                 │ TLS + LB  │
+  └─────┬─────┘                  └─────┬─────┘                 └─────┬─────┘
+        └──────────────────────────────┼──────────────────────────────┘
+                                       │
         ┌─────────────────────────────┼─────────────────────────────┐
         │                             │                             │
   ┌─────▼─────┐                 ┌─────▼─────┐                 ┌─────▼─────┐
@@ -58,7 +59,7 @@ This project provides Infrastructure as Code (IaC) for deploying Landscape Serve
 | **PostgreSQL**       | 3     | Patroni + Streaming Replication | Automatic          |
 | **RabbitMQ**         | 3     | Clustered + Mirrored Queues     | Automatic          |
 | **Landscape Server** | 3     | Stateless + Load Balanced       | Automatic          |
-| **HAProxy**          | 1     | Load Balancer                   | Single entry point |
+| **HAProxy**          | 3     | Active/Active Load Balancing    | Automatic          |
 
 ## Prerequisites
 
@@ -68,7 +69,7 @@ This project provides Infrastructure as Code (IaC) for deploying Landscape Serve
 |--------------------|----------------------------------------|
 | MAAS               | Configured with available machines     |
 | Juju Controller    | Bootstrapped on MAAS (`maas_cloud`)    |
-| Machines           | **10 machines** available in MAAS pool |
+| Machines           | **12 machines** available in MAAS pool |
 | Availability Zones | 3 zones recommended (AZ1, AZ2, AZ3)    |
 
 ### MAAS Configuration
@@ -82,16 +83,16 @@ It is needed pre-created VMs with the proper tags.
 | Landscape Server | `landscape`     | 3      | 4 vCPU, 4GB RAM, 50GB disk  |
 | PostgreSQL       | `landscapesql`  | 3      | 4 vCPU, 4GB RAM, 100GB disk |
 | RabbitMQ         | `landscapeamqp` | 3      | 2 vCPU, 2GB RAM, 20GB disk  |
-| HAProxy          | `landscapeha`   | 1      | 2 vCPU, 2GB RAM, 20GB disk  |
-| **Total**        |                 | **10** |                             |
+| HAProxy          | `landscapeha`   | 3      | 2 vCPU, 2GB RAM, 20GB disk  |
+| **Total**        |                 | **12** |                             |
 
 ### Zone Distribution
 
 | Zone | Machines                                                        |
 |------|-----------------------------------------------------------------|
 | AZ1  | 1x landscape, 1x landscapesql, 1x landscapeamqp, 1x landscapeha |
-| AZ2  | 1x landscape, 1x landscapesql, 1x landscapeamqp                 |
-| AZ3  | 1x landscape, 1x landscapesql, 1x landscapeamqp                 |
+| AZ2  | 1x landscape, 1x landscapesql, 1x landscapeamqp, 1x landscapeha |
+| AZ3  | 1x landscape, 1x landscapesql, 1x landscapeamqp, 1x landscapeha |
 
 ### Required Software
 
@@ -207,8 +208,8 @@ haproxy = {
   app_name    = "haproxy"
   channel     = "latest/stable"
   base        = "ubuntu@22.04"    # Required for latest/stable channel
-  units       = 1
-  constraints = "tags=landscapeha zones=AZ1"
+  units       = 3
+  constraints = "tags=landscapeha zones=AZ1,AZ2,AZ3"
   config = {
     "services"                    = ""  # CRITICAL: Prevents duplicate frontends
     "default_timeouts"            = "queue 60000, connect 5000, client 120000, server 120000"

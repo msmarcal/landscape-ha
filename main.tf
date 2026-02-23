@@ -110,17 +110,8 @@ locals {
     } : k => v if v != ""
   }
 
-  # SSL config for landscape-server
-  landscape_ssl_config = {
-    "ssl_cert" = base64encode(tls_self_signed_cert.haproxy.cert_pem)
-  }
-
-  # Merge admin config, SSL config, and user-provided config (user config takes precedence)
-  landscape_config = merge(
-    local.landscape_admin_config,
-    local.landscape_ssl_config,
-    var.landscape_server.config
-  )
+  # Merge admin config with user-provided config (user config takes precedence)
+  landscape_config = merge(local.landscape_admin_config, var.landscape_server.config)
 }
 
 resource "juju_application" "landscape_server" {

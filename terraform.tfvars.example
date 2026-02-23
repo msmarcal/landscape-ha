@@ -130,9 +130,9 @@ postgresql = {
 }
 
 # ----------------------------------------------------------------------------
-# HAProxy - Load balancer and TLS termination
+# HAProxy - HA with 3 units for load balancer redundancy
 # ----------------------------------------------------------------------------
-# Single entry point for all Landscape traffic. Requires a machine tagged
+# Entry point for all Landscape traffic. Requires machines tagged
 # 'landscapeha' in MAAS. Handles SSL/TLS and distributes requests across
 # Landscape Server units.
 #
@@ -150,8 +150,8 @@ haproxy = {
   app_name    = "haproxy"
   channel     = "latest/stable"
   base        = "ubuntu@22.04"
-  units       = 1
-  constraints = "tags=landscapeha zones=AZ1"
+  units       = 3
+  constraints = "tags=landscapeha zones=AZ1,AZ2,AZ3"
   config = {
     # IMPORTANT: Must be empty to prevent duplicate frontend blocks
     # when using the website relation with landscape-server
