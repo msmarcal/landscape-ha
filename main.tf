@@ -172,7 +172,7 @@ resource "juju_application" "haproxy" {
   units       = var.haproxy.units
   constraints = var.haproxy.constraints
   config = merge(var.haproxy.config, {
-    "ssl_cert" = base64encode(tls_self_signed_cert.haproxy.cert_pem)
+    "ssl_cert" = base64encode(tls_locally_signed_cert.haproxy.cert_pem)
     "ssl_key"  = base64encode(tls_private_key.haproxy.private_key_pem)
   })
 }
@@ -259,23 +259,43 @@ resource "juju_integration" "landscape_postgresql" {
 # ============================================================================
 # SSL/TLS CERTIFICATE
 # ============================================================================
+# Creates a local CA and signs a server certificate for HAProxy.
+# The CA cert is exported for Landscape clients (ssl-public-key).
+# The server cert + key are injected into HAProxy for TLS termination.
 
 # ----------------------------------------------------------------------------
-# Private Key
+# Certificate Authority
 # ----------------------------------------------------------------------------
-# Generates an RSA private key for the self-signed certificate.
-# The private key is stored in Terraform state (acceptable for self-signed).
+resource "tls_private_key" "ca" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "tls_self_signed_cert" "ca" {
+  private_key_pem = tls_private_key.ca.private_key_pem
+
+  subject {
+    common_name = "${var.ssl_cert_cn} CA"
+  }
+
+  validity_period_hours = 87600 # 10 years
+  is_ca_certificate     = true
+
+  allowed_uses = [
+    "cert_signing",
+    "crl_signing",
+  ]
+}
+
+# ----------------------------------------------------------------------------
+# Server Certificate (signed by CA)
+# ----------------------------------------------------------------------------
 resource "tls_private_key" "haproxy" {
   algorithm = "RSA"
   rsa_bits  = 2048
 }
 
-# ----------------------------------------------------------------------------
-# Self-Signed Certificate
-# ----------------------------------------------------------------------------
-# Generates a self-signed certificate using the configured CN and SANs.
-# Used by HAProxy for TLS termination and exported for Landscape clients.
-resource "tls_self_signed_cert" "haproxy" {
+resource "tls_cert_request" "haproxy" {
   private_key_pem = tls_private_key.haproxy.private_key_pem
 
   subject {
@@ -283,6 +303,12 @@ resource "tls_self_signed_cert" "haproxy" {
   }
 
   dns_names = var.ssl_cert_sans
+}
+
+resource "tls_locally_signed_cert" "haproxy" {
+  cert_request_pem   = tls_cert_request.haproxy.cert_request_pem
+  ca_private_key_pem = tls_private_key.ca.private_key_pem
+  ca_cert_pem        = tls_self_signed_cert.ca.cert_pem
 
   validity_period_hours = 87600 # 10 years
 
@@ -294,11 +320,11 @@ resource "tls_self_signed_cert" "haproxy" {
 }
 
 # ----------------------------------------------------------------------------
-# Export Certificate
+# Export CA Certificate
 # ----------------------------------------------------------------------------
-# Writes the public certificate to the configured export path for use
+# Writes the CA certificate to the configured export path for use
 # by Landscape clients (landscape-client ssl-public-key config).
 resource "local_file" "landscape_cert" {
-  content  = tls_self_signed_cert.haproxy.cert_pem
+  content  = tls_self_signed_cert.ca.cert_pem
   filename = "${var.ssl_cert_export_path}/landscape.crt"
 }
