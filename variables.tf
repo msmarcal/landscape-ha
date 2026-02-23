@@ -38,6 +38,12 @@ variable "ssl_cert_cn" {
   default     = "landscape.maas"
 }
 
+variable "ssl_cert_sans" {
+  description = "Subject Alternative Names (DNS) for the self-signed SSL certificate"
+  type        = list(string)
+  default     = []
+}
+
 
 # ----------------------------------------------------------------------------
 # Landscape Admin Configuration

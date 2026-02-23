@@ -50,12 +50,12 @@ output "rabbitmq_server" {
 
 output "landscape_url" {
   description = "Message server URL (landscape-client: url)"
-  value       = "https://${data.external.haproxy_hostname.result.hostname}/message-system"
+  value       = "https://${var.ssl_cert_cn}/message-system"
 }
 
 output "landscape_ping_url" {
   description = "Ping server URL (landscape-client: ping-url)"
-  value       = "http://${data.external.haproxy_hostname.result.hostname}/ping"
+  value       = "http://${var.ssl_cert_cn}/ping"
 }
 
 output "ssl_cert_path" {

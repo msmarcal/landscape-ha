@@ -29,12 +29,12 @@ terraform {
       source  = "juju/juju"
       version = "~> 0.14"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
     }
-    external = {
-      source  = "hashicorp/external"
+    local = {
+      source  = "hashicorp/local"
       version = "~> 2.0"
     }
   }
@@ -110,8 +110,17 @@ locals {
     } : k => v if v != ""
   }
 
-  # Merge admin config with user-provided config (user config takes precedence)
-  landscape_config = merge(local.landscape_admin_config, var.landscape_server.config)
+  # SSL config for landscape-server
+  landscape_ssl_config = {
+    "ssl_cert" = base64encode(tls_self_signed_cert.haproxy.cert_pem)
+  }
+
+  # Merge admin config, SSL config, and user-provided config (user config takes precedence)
+  landscape_config = merge(
+    local.landscape_admin_config,
+    local.landscape_ssl_config,
+    var.landscape_server.config
+  )
 }
 
 resource "juju_application" "landscape_server" {
@@ -171,7 +180,10 @@ resource "juju_application" "haproxy" {
 
   units       = var.haproxy.units
   constraints = var.haproxy.constraints
-  config      = var.haproxy.config
+  config = merge(var.haproxy.config, {
+    "ssl_cert" = base64encode(tls_self_signed_cert.haproxy.cert_pem)
+    "ssl_key"  = base64encode(tls_private_key.haproxy.private_key_pem)
+  })
 }
 
 # ----------------------------------------------------------------------------
@@ -254,75 +266,48 @@ resource "juju_integration" "landscape_postgresql" {
 }
 
 # ============================================================================
-# POST-DEPLOYMENT
+# SSL/TLS CERTIFICATE
 # ============================================================================
 
 # ----------------------------------------------------------------------------
-# Export HAProxy SSL Certificate
+# Private Key
 # ----------------------------------------------------------------------------
-# Generates a self-signed SSL certificate on the HAProxy unit using the
-# machine hostname as CN, replacing any charm-generated cert. Reloads
-# HAProxy and exports the certificate locally for Landscape client use.
-resource "null_resource" "export_haproxy_cert" {
-  depends_on = [
-    juju_integration.landscape_haproxy,
-    juju_integration.landscape_rabbitmq,
-    juju_integration.landscape_postgresql,
-  ]
-
-  triggers = {
-    # Re-run if haproxy application changes
-    haproxy_app = juju_application.haproxy.name
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Waiting for ${var.landscape_server.app_name} to be ready..."
-      juju wait-for application ${var.landscape_server.app_name} \
-        -m ${var.model_name} \
-        --query='status=="active"' \
-        --timeout 30m
-
-      echo "Generating self-signed certificate (CN=hostname)..."
-      juju exec --unit ${var.haproxy.app_name}/0 -- sudo bash -c '
-        openssl req -x509 -newkey rsa:2048 \
-          -keyout /tmp/haproxy_key.pem \
-          -out /tmp/haproxy_cert.pem \
-          -days 365 -nodes \
-          -subj "/CN=$(hostname)" 2>/dev/null &&
-        cat /tmp/haproxy_cert.pem /tmp/haproxy_key.pem > /var/lib/haproxy/default.pem &&
-        chmod 600 /var/lib/haproxy/default.pem &&
-        rm -f /tmp/haproxy_key.pem /tmp/haproxy_cert.pem &&
-        systemctl reload haproxy
-      '
-
-      if ! juju exec --unit ${var.haproxy.app_name}/0 -- \
-        'test -s /var/lib/haproxy/default.pem' 2>/dev/null; then
-        echo "ERROR: Failed to generate self-signed certificate." >&2
-        exit 1
-      fi
-      echo "Self-signed certificate created and HAProxy reloaded."
-
-      echo "Exporting HAProxy SSL certificate..."
-      mkdir -p "${var.ssl_cert_export_path}"
-      juju exec --unit ${var.haproxy.app_name}/0 -- \
-        'openssl x509 -in /var/lib/haproxy/default.pem' \
-        > "${var.ssl_cert_export_path}/landscape.crt"
-      echo "Certificate exported to ${var.ssl_cert_export_path}/landscape.crt"
-    EOT
-  }
+# Generates an RSA private key for the self-signed certificate.
+# The private key is stored in Terraform state (acceptable for self-signed).
+resource "tls_private_key" "haproxy" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
 }
 
 # ----------------------------------------------------------------------------
-# HAProxy Hostname
+# Self-Signed Certificate
 # ----------------------------------------------------------------------------
-# Queries the HAProxy unit's hostname after deployment for use in outputs.
-# This is the machine's instance ID in MAAS (e.g., "landscapeha-1").
-data "external" "haproxy_hostname" {
-  depends_on = [null_resource.export_haproxy_cert]
+# Generates a self-signed certificate using the configured CN and SANs.
+# Used by HAProxy for TLS termination and exported for Landscape clients.
+resource "tls_self_signed_cert" "haproxy" {
+  private_key_pem = tls_private_key.haproxy.private_key_pem
 
-  program = [
-    "bash", "-c",
-    "printf '{\"hostname\":\"%s\"}' \"$(juju exec --unit ${var.haproxy.app_name}/0 -- hostname | tr -d '\\n\\r')\""
+  subject {
+    common_name = var.ssl_cert_cn
+  }
+
+  dns_names = var.ssl_cert_sans
+
+  validity_period_hours = 87600 # 10 years
+
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
   ]
+}
+
+# ----------------------------------------------------------------------------
+# Export Certificate
+# ----------------------------------------------------------------------------
+# Writes the public certificate to the configured export path for use
+# by Landscape clients (landscape-client ssl-public-key config).
+resource "local_file" "landscape_cert" {
+  content  = tls_self_signed_cert.haproxy.cert_pem
+  filename = "${var.ssl_cert_export_path}/landscape.crt"
 }
